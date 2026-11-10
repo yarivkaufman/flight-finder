@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ trip.name }} · Flight Finder{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:12px">
+  <h2 style="margin:0;font-size:20px">{{ trip.name }}</h2>
+  {% if not trip.active %}<span class="pill warn">stopped</span>{% endif %}
+  <span style="margin-left:auto" class="row">
+    <form class="inline" method="post" action="/trips/{{ trip.id }}/check"><input type="hidden" name="kind" value="daily">
+      <button {{ 'disabled' if busy }}>Check now</button></form>
+    {% if google_on %}<form class="inline" method="post" action="/trips/{{ trip.id }}/check"><input type="hidden" name="kind" value="google">
+      <button {{ 'disabled' if busy }} title="Uses SerpApi searches from the shared free plan">Check Google Flights</button></form>{% endif %}
+  </span>
+</div>
+<p class="meta">{{ trip.origin }} → {{ trip.destination }} · {{ trip.depart_date }}{{ (' – ' ~ trip.return_date) if trip.return_date else ' (one way)' }}
+ · {{ trip.adults }} adult{{ 's' if trip.adults > 1 }}{{ (', ' ~ trip.children ~ ' child(ren)') if trip.children else '' }} · {{ trip.cabin.replace('_', ' ') }}
+ {% if trip.last_google_at %}· Google checked {{ trip.last_google_at | localtime }}{% endif %}</p>
+{% if trip.request %}<p class="meta">You asked: “{{ trip.request }}”</p>{% endif %}
+{% if trip.notes %}<p class="meta">Notes: {{ trip.notes }}</p>{% endif %}
+{% if trip.last_error %}<p class="notice">⚠ {{ trip.last_error }}</p>{% endif %}
+{% if busy %}<p class="notice">⏳ {{ busy | join(', ') }} — refresh in a minute.</p>{% endif %}
+
+{% if chart %}<div class="panel"><h2>Cheapest price over time</h2>{{ chart | safe }}</div>{% endif %}
+
+{% if dates %}
+<div class="panel"><h2>Cheapest by dates</h2>
+  <div class="dates">{% set exact = (trip.depart_date, trip.return_date) %}{% set base = dict(dates).get(exact) %}
+  {% for (d, r), p in dates %}
+    <span class="d {{ 'exact' if (d, r) == exact }} {{ 'cheaper' if base and p < base }}">{{ d[5:] }}{{ (' – ' ~ r[5:]) if r else '' }}: <b>{{ p | money(trip.currency) }}</b></span>
+  {% endfor %}</div>
+</div>
+{% endif %}
+
+{% for key, title in (('duffel', 'Best options'), ('google', 'Google Flights')) %}{% if results.get(key) %}{% set chk, offers = results[key] %}
+<div class="panel"><h2>{{ title }} <span class="meta">· {{ chk.at | localtime }}</span></h2>
+<table>
+  <tr><th>#</th><th class="num">Price</th><th>Flights</th><th class="num hide-sm">Time</th><th class="hide-sm">Source</th></tr>
+  {% for o in offers if o.depart_date == trip.depart_date %}{% if loop.index <= 10 %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td class="num"><b>{{ o.price | money(o.currency) }}</b>{% if o.booking_url %}<br><a href="{{ o.booking_url }}" target="_blank" rel="noopener">book</a>{% endif %}</td>
+    <td>{{ o.airlines }}{% for tg in o.tags | fromjson %}<span class="tag {{ 'good' if tg in ('nonstop', 'cheapest', 'fastest') }}">{{ tg }}</span>{% endfor %}
+      <ul class="legs">{% for s in o.slices | fromjson %}
+        <li>{{ s.route | join(' → ') }} · {{ s.departure | clock }} → {{ s.arrival | clock }} · {{ s.minutes | hm }}{{ (' · ' ~ s.stops ~ ' stop' ~ ('s' if s.stops > 1 else '')) if s.stops else ' · nonstop' }}</li>
+      {% endfor %}</ul></td>
+    <td class="num hide-sm">{{ o.minutes | hm }}</td>
+    <td class="meta hide-sm">{{ source_labels.get(o.provider, o.provider) }}</td>
+  </tr>{% endif %}
+  {% else %}<tr><td colspan="5" class="notice">Nothing on your exact dates fits your rules — see nearby dates above.</td></tr>{% endfor %}
+</table>
+</div>
+{% endif %}{% endfor %}
+
+<div class="panel"><h2>Rules</h2>
+<form method="post" action="/trips/{{ trip.id }}/settings" class="settings">
+  <label>Name</label><input type="text" name="name" value="{{ trip.name }}">
+  <label>Target price (email)</label><input type="text" name="target_price" value="{{ trip.target_price or '' }}" placeholder="e.g. 900">
+  <label>Max price</label><input type="text" name="max_price" value="{{ trip.max_price or '' }}">
+  <label>Max stops</label><input type="text" name="max_stops" value="{{ trip.max_stops if trip.max_stops is not none else '' }}" placeholder="any">
+  <label>Max hours each way</label><input type="text" name="max_hours" value="{{ trip.max_hours or '' }}">
+  <label>Nearby dates (± days)</label><input type="text" name="flex_days" value="{{ trip.flex_days }}">
+  <label>Adults / children</label><span class="row"><input type="text" name="adults" value="{{ trip.adults }}" style="width:60px"><input type="text" name="children" value="{{ trip.children }}" style="width:60px"></span>
+  <label>Depart between (hours)</label><span class="row"><input type="text" name="depart_after" value="{{ trip.depart_after if trip.depart_after is not none else '' }}" placeholder="0" style="width:60px"> and <input type="text" name="depart_before" value="{{ trip.depart_before if trip.depart_before is not none else '' }}" placeholder="23" style="width:60px"></span>
+  <label>Avoid airlines</label><input type="text" name="exclude_airlines" value="{{ trip.exclude_airlines }}" placeholder="comma separated">
+  <label>Prefer airlines</label><input type="text" name="prefer_airlines" value="{{ trip.prefer_airlines }}">
+  <label>An hour of travel is worth</label><input type="text" name="value_per_hour" value="{{ trip.value_per_hour }}">
+  <label>Avoiding a stop is worth</label><input type="text" name="value_per_stop" value="{{ trip.value_per_stop }}">
+  <span></span><span><button class="primary">Save</button> <span class="meta">Changes apply from the next check.</span></span>
+</form>
+</div>
+
+{% if emails %}<div class="panel"><h2>Emails</h2><table>
+  {% for e in emails %}<tr><td class="meta">{{ e.at | localtime }}</td><td>{{ e.subject }}</td><td class="meta">{{ 'sent' if e.sent else ('failed: ' ~ e.error if e.error else 'queued') }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+
+<div class="row">
+  <form class="inline" method="post" action="/trips/{{ trip.id }}/active"><input type="hidden" name="active" value="{{ 0 if trip.active else 1 }}">
+    <button>{{ 'Stop watching' if trip.active else 'Watch again' }}</button></form>
+  <form class="inline" method="post" action="/trips/{{ trip.id }}/delete" onsubmit="return confirm('Delete this trip and its history?')"><button class="danger">Delete</button></form>
+</div>
+{% endblock %}

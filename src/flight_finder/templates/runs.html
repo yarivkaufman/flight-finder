@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Runs · Flight Finder{% endblock %}
+{% block content %}
+<div class="panel"><h2>Checks</h2>
+<table>
+  <tr><th>Started</th><th>Kind</th><th>Trips</th><th>Offers</th><th>Emails</th><th>Problems</th></tr>
+  {% for r in runs %}{% set errs = r.errors | fromjson %}
+  <tr>
+    <td>{{ r.started_at | localtime }}{% if not r.finished_at %} <span class="pill">running</span>{% endif %}</td>
+    <td>{{ r.kind }}</td><td>{{ r.trips }}</td><td>{{ r.offers }}</td><td>{{ r.emails }}</td>
+    <td>{% if errs %}<details><summary>{{ errs | length }}</summary><ul>{% for e in errs %}<li class="meta">{{ e }}</li>{% endfor %}</ul></details>{% else %}—{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="notice">No daily checks yet.</td></tr>{% endfor %}
+</table></div>
+<div class="panel"><h2>Emails {% if not email_on %}<span class="meta">· SMTP not set up, so these are queued only</span>{% endif %}</h2>
+<table>
+  {% for e in emails %}<tr><td class="meta">{{ e.at | localtime }}</td><td><details><summary>{{ e.subject }}</summary><pre style="white-space:pre-wrap">{{ e.body }}</pre></details></td><td class="meta">{{ 'sent' if e.sent else ('failed: ' ~ e.error if e.error else 'queued') }}</td></tr>
+  {% else %}<tr><td class="notice">No emails yet.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}
