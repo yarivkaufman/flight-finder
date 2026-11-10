@@ -1,0 +1,13 @@
+services:
+  flight-finder:
+    build: .
+    image: flight-finder:latest
+    container_name: flight-finder
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8097:8097"   # dashboard on the LAN
+    volumes:
+      - ./data:/data          # SQLite DB
+      - ./config:/config:ro   # config.yaml (edit on the host, no rebuild)
+    mem_limit: 384m

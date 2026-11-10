@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="panel" method="post" action="/trips">
+  <div class="toolbar" style="margin:0">
+    <input type="text" name="text" placeholder="{{ 'e.g. Newark to Tel Aviv Dec 20, back Jan 3, nonstop preferred' if claude_on else 'e.g. EWR TLV 2026-12-20 2027-01-03' }}">
+    <button class="primary">Watch trip</button>
+  </div>
+  <details class="more"><summary>or fill in the fields</summary>
+    <div class="add-fields">
+      <input type="text" name="origin" placeholder="From ({{ defaults.origin }})" maxlength="3">
+      <input type="text" name="destination" placeholder="To, e.g. TLV" maxlength="3">
+      <label class="meta">Depart <input type="date" name="depart"></label>
+      <label class="meta">Return <input type="date" name="ret"></label>
+    </div>
+  </details>
+</form>
+<div class="toolbar">
+  <div class="tabs" style="margin:0">
+    <a class="tab {{ 'on' if view != 'stopped' }}" href="/?view=active">Watching<span class="n">{{ n_active }}</span></a>
+    <a class="tab {{ 'on' if view == 'stopped' }}" href="/?view=stopped">Stopped<span class="n">{{ n_stopped }}</span></a>
+  </div>
+  {% if last_run %}<span class="meta" style="margin-left:auto">Last check {{ last_run.finished_at | localtime }} · <a href="/runs">runs</a></span>{% endif %}
+  <form class="inline" method="post" action="/run" {{ 'style="margin-left:auto"' | safe if not last_run }}>
+    <button {{ 'disabled' if busy }}>{{ 'Working…' if busy else 'Check all now' }}</button>
+  </form>
+</div>
+{% if busy %}<p class="notice">⏳ {{ busy | join(', ') }} — refresh in a minute.</p>{% endif %}
+{% if last_message %}<p class="notice">{{ last_message }}</p>{% endif %}
+
+{% for t in trips %}{% set c = latest[t.id] %}
+<div class="card">
+  <div class="row">
+    <a class="title" href="/trips/{{ t.id }}">{{ t.name }}</a>
+    {% if t.target_price %}<span class="pill">target {{ t.target_price | money(t.currency) }}</span>{% endif %}
+    {% if t.last_error %}<span class="pill warn" title="{{ t.last_error }}">problem</span>{% endif %}
+    <span class="meta" style="margin-left:auto">{{ ('checked ' ~ (t.last_check_at | localtime)) if t.last_check_at else 'not checked yet' }}</span>
+  </div>
+  <div class="prices">
+    <div class="price">
+      <div class="cond"><span class="key k1"></span>Your dates · {{ t.depart_date }}{{ (' – ' ~ t.return_date) if t.return_date else ' one way' }}</div>
+      {% if c and c.exact_low is not none %}
+      <div class="amt {{ 'hit-target' if t.target_price and c.exact_low <= t.target_price }}">{{ c.exact_low | money(t.currency) }}</div>
+      <div class="meta">{% if t.emailed_low and c.exact_low < t.emailed_low %}<span class="pill ok">new low</span> {% endif %}cheapest that fits your rules</div>
+      {% else %}<div class="amt">—</div><div class="meta">no results yet</div>{% endif %}
+    </div>
+    <div class="price">
+      <div class="cond"><span class="key k2"></span>Nearby dates (±{{ t.flex_days }} days)</div>
+      {% if c and c.flex_low is not none %}
+      <div class="amt">{{ c.flex_low | money(t.currency) }}</div>
+      <div class="meta">{{ c.flex_depart }}{{ (' – ' ~ c.flex_return) if c.flex_return else '' }}{% if c.exact_low and c.flex_low < c.exact_low %} · <span class="hit-target">saves {{ (c.exact_low - c.flex_low) | money(t.currency) }}</span>{% endif %}</div>
+      {% else %}<div class="amt">—</div><div class="meta">{{ 'off' if t.flex_days == 0 else 'no results yet' }}</div>{% endif %}
+    </div>
+    <div class="price">
+      <div class="cond">Trip</div>
+      <div class="meta">{{ t.adults }} adult{{ 's' if t.adults > 1 }}{{ (', ' ~ t.children ~ ' child' ~ ('ren' if t.children > 1 else '')) if t.children else '' }} · {{ t.cabin.replace('_', ' ') }}{{ (' · max ' ~ t.max_stops ~ ' stop' ~ ('s' if t.max_stops != 1 else '')) if t.max_stops is not none else '' }}</div>
+      {% if t.emailed_low %}<div class="meta">last emailed {{ t.emailed_low | money(t.currency) }}</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% else %}
+<p class="notice">{{ 'Nothing stopped.' if view == 'stopped' else 'No trips yet — describe one above.' }}</p>
+{% endfor %}
+<p class="meta">Prices are the total for all passengers, in {{ defaults.currency }}. Sources: {{ sources | join(', ') or 'none configured' }}.
+Email: {{ 'on' if email_on else 'off (emails are queued; see Runs & emails)' }}.</p>
+{% endblock %}

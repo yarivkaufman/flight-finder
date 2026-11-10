@@ -1,0 +1,31 @@
+# flight-finder configuration. Re-read at the start of every check - no restart needed
+# (except check_at / timezone / weekly summary time, which are read at startup).
+
+timezone: America/New_York
+check_at: "07:30"              # daily Duffel check of every watched trip
+web_base_url: http://192.168.1.67:8097
+results_per_check: 15          # offers kept per date pair
+
+defaults:                      # for new trips; each trip can change its own on its page
+  origin: EWR
+  currency: USD
+  adults: 1
+  cabin: economy
+  flex_days: 3                 # also check up to 3 days earlier/later (same trip length)
+  value_per_hour: 15           # ranking: an hour of travel is worth $15 to you
+  value_per_stop: 40           #          avoiding a stop is worth $40
+
+email:                         # a drop emails when the cheapest price beats the last emailed low by
+  min_drop_usd: 25             #   at least $25
+  min_drop_pct: 5              #   or at least 5%   (target price hits always email)
+  weekly_summary_day: sun
+  weekly_summary_at: "08:00"
+  failing_days: 3              # a source failing this many daily checks in a row shows in the summary
+
+google:                        # Google Flights via SerpApi - shares price-agent's free plan
+  reserve: 60                  # never use it when fewer searches than this are left this month
+  return_options: 3            # a round trip costs 1 + this many searches
+
+parsing:                       # Claude reads trips written in words
+  model: claude-opus-5-5
+  effort: low
